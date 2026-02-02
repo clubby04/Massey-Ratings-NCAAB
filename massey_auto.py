@@ -1,3 +1,20 @@
+from datetime import date
+
+today = date.today()
+
+# Default season range for current year
+season_start = date(today.year, 11, 1)
+season_end = date(today.year + 1, 4, 10)
+
+# If it's Jan-Apr, adjust season to previous Nov-Apr
+if today.month <= 4:
+    season_start = date(today.year - 1, 11, 1)
+    season_end = date(today.year, 4, 10)
+
+if not (season_start <= today <= season_end):
+    print("Outside NCAA basketball season. Exiting.")
+    exit(0)
+    
 import os
 import time
 import datetime
