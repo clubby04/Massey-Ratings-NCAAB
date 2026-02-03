@@ -1,10 +1,11 @@
-from datetime import date
 import os
 import time
-import datetime
-import pandas as pd
 import json
 import tempfile
+import datetime
+from datetime import date
+
+import pandas as pd
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -15,24 +16,6 @@ from selenium.webdriver.chrome.service import Service
 
 import gspread
 from google.oauth2.service_account import Credentials
-
-def get_google_credentials():
-    """
-    Load Google service account credentials from GitHub Actions secret
-    and write to a temp file.
-    """
-    secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-
-    if not secret_json:
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
-
-    data = json.loads(secret_json)
-
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-    with open(temp.name, "w") as f:
-        json.dump(data, f)
-
-    return temp.name
 
 
 # ===============================
@@ -71,17 +54,35 @@ SCOPES = [
 
 
 # ===============================
-# HELPER FUNCTIONS
+# GOOGLE CREDENTIALS
+# ===============================
+def get_google_credentials():
+    secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+    if not secret_json:
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
+
+    data = json.loads(secret_json)
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    with open(temp.name, "w") as f:
+        json.dump(data, f)
+
+    return temp.name
+
+
+# ===============================
+# HELPERS
 # ===============================
 def in_season(today):
     if today.month >= 11:
-        season_start = datetime.date(today.year, 11, 1)
-        season_end = datetime.date(today.year + 1, 4, 10)
+        start = datetime.date(today.year, 11, 1)
+        end = datetime.date(today.year + 1, 4, 10)
     else:
-        season_start = datetime.date(today.year - 1, 11, 1)
-        season_end = datetime.date(today.year, 4, 10)
+        start = datetime.date(today.year - 1, 11, 1)
+        end = datetime.date(today.year, 4, 10)
 
-    return season_start <= today <= season_end
+    return start <= today <= end
 
 
 def already_ran_today(today):
@@ -103,7 +104,6 @@ def download_massey():
     print("Downloading Massey Ratings...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # 🔧 STEP 1 — CI-SAFE HEADLESS CHROME SETUP
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -125,11 +125,8 @@ def download_massey():
 
     service = Service("/usr/bin/chromedriver")
 
-    attempts = 0
-    while attempts < 3:
-        attempts += 1
-        print(f"Attempt {attempts}...")
-
+    for attempt in range(1, 4):
+        print(f"Attempt {attempt}...")
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
         try:
@@ -148,20 +145,19 @@ def download_massey():
 
             time.sleep(2)
 
-            timeout = 90
             start = time.time()
             while True:
                 files = os.listdir(DOWNLOAD_DIR)
-                if any("export" in f and f.endswith(".csv") for f in files):
+                if any(f.endswith(".csv") and "export" in f for f in files):
                     break
-                if time.time() - start > timeout:
-                    raise Exception("Download did not start within 90 seconds.")
+                if time.time() - start > 90:
+                    raise RuntimeError("CSV download timed out")
                 time.sleep(1)
 
             while any(f.endswith(".crdownload") for f in os.listdir(DOWNLOAD_DIR)):
                 time.sleep(1)
 
-            print("Download complete!")
+            print("Download complete")
             driver.quit()
             return
 
@@ -169,9 +165,8 @@ def download_massey():
             print("Error:", e)
             driver.save_screenshot("error.png")
             driver.quit()
-            if attempts == 3:
+            if attempt == 3:
                 raise
-            print("Retrying in 5 seconds...")
             time.sleep(5)
 
 
@@ -184,11 +179,7 @@ def upload_to_sheets():
     df = pd.read_csv(CSV_FILE, dtype=str).fillna("")
 
     cred_file = get_google_credentials()
-
-creds = Credentials.from_service_account_file(
-    cred_file,
-    scopes=SCOPES
-)
+    creds = Credentials.from_service_account_file(cred_file, scopes=SCOPES)
 
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SHEET_ID)
