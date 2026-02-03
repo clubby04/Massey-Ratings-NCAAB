@@ -3,6 +3,8 @@ import os
 import time
 import datetime
 import pandas as pd
+import json
+import tempfile
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -13,6 +15,24 @@ from selenium.webdriver.chrome.service import Service
 
 import gspread
 from google.oauth2.service_account import Credentials
+
+def get_google_credentials():
+    """
+    Load Google service account credentials from GitHub Actions secret
+    and write to a temp file.
+    """
+    secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+    if not secret_json:
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
+
+    data = json.loads(secret_json)
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    with open(temp.name, "w") as f:
+        json.dump(data, f)
+
+    return temp.name
 
 
 # ===============================
@@ -40,7 +60,6 @@ DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 LAST_RUN_FILE = os.path.join(BASE_DIR, "last_run.txt")
 
 CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
-SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, "service_account.json")
 
 SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"
 TAB_NAME = "Massey_Ratings"
@@ -164,10 +183,12 @@ def upload_to_sheets():
 
     df = pd.read_csv(CSV_FILE, dtype=str).fillna("")
 
-    creds = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES
-    )
+    cred_file = get_google_credentials()
+
+creds = Credentials.from_service_account_file(
+    cred_file,
+    scopes=SCOPES
+)
 
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SHEET_ID)
