@@ -1,3 +1,22 @@
+import json
+import tempfile
+
+
+def get_google_credentials():
+    secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+
+    if not secret_json:
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
+
+    data = json.loads(secret_json)
+
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    with open(temp.name, "w") as f:
+        json.dump(data, f)
+
+    return temp.name
+
+
 def upload_to_sheets():
     print("Uploading to Google Sheets...")
 
