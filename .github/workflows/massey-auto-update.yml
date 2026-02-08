@@ -5,6 +5,9 @@ on:
     - cron: '0 8 * * *'   # 8 AM UTC
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update_massey_ratings:
     runs-on: ubuntu-latest
