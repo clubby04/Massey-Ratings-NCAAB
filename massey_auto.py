@@ -138,15 +138,17 @@ def upload_to_sheets(today: date):
 def main():
     today = utc_today()
 
-    print("RUN DATE (UTC):", today)
+    print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
 
     if not in_season(today):
         print("Out of season — exiting.")
         return
 
-    if already_ran_today(today):
-        print("Already ran today — exiting.")
-        return
+    today = datetime.date.today()
+
+if already_ran_today(today) and os.path.exists(CSV_FILE):
+    print("Already ran today and CSV exists — exiting.")
+    return
 
     download_massey()
     upload_to_sheets(today)
