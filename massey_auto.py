@@ -19,7 +19,7 @@ DOWNLOAD_DIR = "downloads"
 CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
 LAST_RUN_FILE = "last_run_date.txt"
 
-SHEET_ID = "YOUR_SHEET_ID_HERE"
+SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
@@ -40,7 +40,7 @@ def get_google_credentials():
     return temp.name
 
 # ===============================
-# RUN GUARDS
+# RUN GUARD
 # ===============================
 def already_ran_today(today):
     if not os.path.exists(LAST_RUN_FILE):
@@ -74,13 +74,17 @@ def download_massey():
         driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
         time.sleep(5)
 
+        # 🔧 Ensure previous CSV is removed so we always detect new download
+        if os.path.exists(CSV_FILE):
+            os.remove(CSV_FILE)
+
         # TODO: click export button here
 
         timeout = 90
         start = time.time()
+
         while time.time() - start < timeout:
-            files = os.listdir(DOWNLOAD_DIR)
-            if any(f.endswith(".csv") for f in files):
+            if os.path.exists(CSV_FILE):
                 print("CSV downloaded.")
                 return
             time.sleep(1)
@@ -112,9 +116,9 @@ def upload_to_sheets():
 def main():
     today = datetime.date.today()
 
-if already_ran_today(today):
-    print("Already uploaded today — exiting.")
-    return
+    if already_ran_today(today):
+        print("Already uploaded today — exiting.")
+        return
 
     download_massey()
     upload_to_sheets()
