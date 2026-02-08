@@ -112,9 +112,9 @@ def upload_to_sheets():
 def main():
     today = datetime.date.today()
 
-    if already_ran_today(today) and os.path.exists(CSV_FILE):
-        print("Already ran today and CSV exists — exiting.")
-        return
+if already_ran_today(today):
+    print("Already uploaded today — exiting.")
+    return
 
     download_massey()
     upload_to_sheets()
