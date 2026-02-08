@@ -20,8 +20,8 @@ from google.oauth2.service_account import Credentials
 DOWNLOAD_DIR = "downloads"
 CSV_FILE = os.path.join(DOWNLOAD_DIR, "massey_export.csv")
 
-SHEET_ID = "YOUR_SHEET_ID_HERE"   # keep yours
-SHEET_NAME = "Sheet1"
+SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"   # keep yours
+SHEET_NAME = "Massey_Ratings"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
