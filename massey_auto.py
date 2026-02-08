@@ -1,15 +1,13 @@
 import os
-import json
 import time
+import json
 import tempfile
-from datetime import datetime, date, timezone
-
+import datetime
 import pandas as pd
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -19,22 +17,12 @@ from google.oauth2.service_account import Credentials
 # ===============================
 DOWNLOAD_DIR = "downloads"
 CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
+LAST_RUN_FILE = "last_run_date.txt"
 
-SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"   # keep yours
-SHEET_NAME = "Massey_Ratings"
+SHEET_ID = "YOUR_SHEET_ID_HERE"
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-
-RUN_LOG_FILE = "last_run_date.txt"
-
-# ===============================
-# TIME (UTC SAFE)
-# ===============================
-def utc_today():
-    return datetime.now(timezone.utc).date()
+print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
 
 # ===============================
 # GOOGLE CREDENTIALS
@@ -45,7 +33,6 @@ def get_google_credentials():
         raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
 
     data = json.loads(secret_json)
-
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
     with open(temp.name, "w") as f:
         json.dump(data, f)
@@ -53,40 +40,26 @@ def get_google_credentials():
     return temp.name
 
 # ===============================
-# SEASON CHECK (Nov 1 – Apr 10)
+# RUN GUARDS
 # ===============================
-def in_season(today: date) -> bool:
-    if today.month >= 11:
-        start = date(today.year, 11, 1)
-        end = date(today.year + 1, 4, 10)
-    else:
-        start = date(today.year - 1, 11, 1)
-        end = date(today.year, 4, 10)
-
-    return start <= today <= end
-
-# ===============================
-# RUN-ONCE-PER-DAY CHECK
-# ===============================
-def already_ran_today(today: date) -> bool:
-    if not os.path.exists(RUN_LOG_FILE):
+def already_ran_today(today):
+    if not os.path.exists(LAST_RUN_FILE):
         return False
 
-    with open(RUN_LOG_FILE, "r") as f:
+    with open(LAST_RUN_FILE, "r") as f:
         last = f.read().strip()
 
     return last == today.isoformat()
 
-def mark_ran(today: date):
-    with open(RUN_LOG_FILE, "w") as f:
+def write_last_run(today):
+    with open(LAST_RUN_FILE, "w") as f:
         f.write(today.isoformat())
 
 # ===============================
-# DOWNLOAD MASSEY CSV
+# DOWNLOAD
 # ===============================
 def download_massey():
     print("Downloading Massey Ratings...")
-
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
     chrome_options = Options()
@@ -98,11 +71,14 @@ def download_massey():
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        driver.get("https://masseyratings.com/cb/")
+        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
         time.sleep(5)
 
-        timeout = time.time() + 90
-        while time.time() < timeout:
+        # TODO: click export button here
+
+        timeout = 90
+        start = time.time()
+        while time.time() - start < timeout:
             files = os.listdir(DOWNLOAD_DIR)
             if any(f.endswith(".csv") for f in files):
                 print("CSV downloaded.")
@@ -115,20 +91,18 @@ def download_massey():
         driver.quit()
 
 # ===============================
-# UPLOAD TO GOOGLE SHEETS
+# UPLOAD
 # ===============================
-def upload_to_sheets(today: date):
+def upload_to_sheets():
     print("Uploading to Google Sheets...")
 
     df = pd.read_csv(CSV_FILE, dtype=str).fillna("")
-    df.insert(0, "Last Updated (UTC)", today.isoformat())
 
     cred_file = get_google_credentials()
     creds = Credentials.from_service_account_file(cred_file, scopes=SCOPES)
-
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
 
+    sheet = client.open_by_key(SHEET_ID).sheet1
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
@@ -136,25 +110,15 @@ def upload_to_sheets(today: date):
 # MAIN
 # ===============================
 def main():
-    today = utc_today()
-
-    print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
-
-    if not in_season(today):
-        print("Out of season — exiting.")
-        return
-
     today = datetime.date.today()
 
-if already_ran_today(today) and os.path.exists(CSV_FILE):
-    print("Already ran today and CSV exists — exiting.")
-    return
+    if already_ran_today(today) and os.path.exists(CSV_FILE):
+        print("Already ran today and CSV exists — exiting.")
+        return
 
     download_massey()
-    upload_to_sheets(today)
-
-    mark_ran(today)
-    print("Update complete.")
+    upload_to_sheets()
+    write_last_run(today)
 
 if __name__ == "__main__":
     main()
