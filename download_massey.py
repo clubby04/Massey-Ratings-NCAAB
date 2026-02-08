@@ -3,23 +3,18 @@ def download_massey():
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    chrome_options = webdriver.ChromeOptions()
+   chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # Headless but more stealth
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option("useAutomationExtension", False)
-
-    prefs = {
-        "download.default_directory": DOWNLOAD_DIR,
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-    }
-    chrome_options.add_experimental_option("prefs", prefs)
+prefs = {
+    "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
+    "download.prompt_for_download": False,
+    "download.directory_upgrade": True,
+    "safebrowsing.enabled": True,
+}
+chrome_options.add_experimental_option("prefs", prefs)
 
     attempts = 0
     while attempts < 3:
