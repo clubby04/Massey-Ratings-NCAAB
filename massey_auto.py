@@ -18,7 +18,7 @@ from google.oauth2.service_account import Credentials
 # CONSTANTS
 # ===============================
 DOWNLOAD_DIR = "downloads"
-CSV_FILE = os.path.join(DOWNLOAD_DIR, "massey_export.csv")
+CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
 
 SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"   # keep yours
 SHEET_NAME = "Massey_Ratings"
@@ -98,7 +98,7 @@ def download_massey():
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        driver.get("https://masseyratings.com/cb/export")
+        driver.get("https://masseyratings.com/cb/")
         time.sleep(5)
 
         timeout = time.time() + 90
