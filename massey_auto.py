@@ -1,64 +1,46 @@
 import os
-import time
 import json
+import time
 import tempfile
-import datetime
-from datetime import date
+from datetime import datetime, date, timezone
 
 import pandas as pd
 
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 
 import gspread
 from google.oauth2.service_account import Credentials
 
-
 # ===============================
-# SEASON CHECK (Nov 1 – Apr 10)
+# CONSTANTS
 # ===============================
-today = date.today()
+DOWNLOAD_DIR = "downloads"
+CSV_FILE = os.path.join(DOWNLOAD_DIR, "massey_export.csv")
 
-season_start = date(today.year, 11, 1)
-season_end = date(today.year + 1, 4, 10)
-
-if today.month <= 4:
-    season_start = date(today.year - 1, 11, 1)
-    season_end = date(today.year, 4, 10)
-
-if not (season_start <= today <= season_end):
-    print("Outside NCAA basketball season. Exiting.")
-    exit(0)
-
-
-# ===============================
-# PATHS & CONSTANTS
-# ===============================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
-LAST_RUN_FILE = os.path.join(BASE_DIR, "last_run.txt")
-
-CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
-
-SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"
-TAB_NAME = "Massey_Ratings"
+SHEET_ID = "YOUR_SHEET_ID_HERE"   # keep yours
+SHEET_NAME = "Sheet1"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
 
+RUN_LOG_FILE = "last_run_date.txt"
+
+# ===============================
+# TIME (UTC SAFE)
+# ===============================
+def utc_today():
+    return datetime.now(timezone.utc).date()
 
 # ===============================
 # GOOGLE CREDENTIALS
 # ===============================
 def get_google_credentials():
     secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-
     if not secret_json:
         raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS secret not found")
 
@@ -70,136 +52,93 @@ def get_google_credentials():
 
     return temp.name
 
-
 # ===============================
-# HELPERS
+# SEASON CHECK (Nov 1 – Apr 10)
 # ===============================
-def in_season(today):
+def in_season(today: date) -> bool:
     if today.month >= 11:
-        start = datetime.date(today.year, 11, 1)
-        end = datetime.date(today.year + 1, 4, 10)
+        start = date(today.year, 11, 1)
+        end = date(today.year + 1, 4, 10)
     else:
-        start = datetime.date(today.year - 1, 11, 1)
-        end = datetime.date(today.year, 4, 10)
+        start = date(today.year - 1, 11, 1)
+        end = date(today.year, 4, 10)
 
     return start <= today <= end
 
-
-def already_ran_today(today):
-    if not os.path.exists(LAST_RUN_FILE):
+# ===============================
+# RUN-ONCE-PER-DAY CHECK
+# ===============================
+def already_ran_today(today: date) -> bool:
+    if not os.path.exists(RUN_LOG_FILE):
         return False
-    with open(LAST_RUN_FILE, "r") as f:
-        return f.read().strip() == today.isoformat()
 
+    with open(RUN_LOG_FILE, "r") as f:
+        last = f.read().strip()
 
-def mark_ran(today):
-    with open(LAST_RUN_FILE, "w") as f:
+    return last == today.isoformat()
+
+def mark_ran(today: date):
+    with open(RUN_LOG_FILE, "w") as f:
         f.write(today.isoformat())
 
-
 # ===============================
-# DOWNLOAD MASSEY RATINGS
+# DOWNLOAD MASSEY CSV
 # ===============================
 def download_massey():
     print("Downloading Massey Ratings...")
+
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
-
-    prefs = {
-        "download.default_directory": DOWNLOAD_DIR,
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-    }
-    chrome_options.add_experimental_option("prefs", prefs)
 
     service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-    for attempt in range(1, 4):
-        print(f"Attempt {attempt}...")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        driver.get("https://masseyratings.com/cb/export")
+        time.sleep(5)
 
-        try:
-            driver.set_page_load_timeout(180)
-            driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
+        timeout = time.time() + 90
+        while time.time() < timeout:
+            files = os.listdir(DOWNLOAD_DIR)
+            if any(f.endswith(".csv") for f in files):
+                print("CSV downloaded.")
+                return
+            time.sleep(1)
 
-            wait = WebDriverWait(driver, 40)
-            dropdown = wait.until(
-                EC.presence_of_element_located((By.ID, "pulldownlinks"))
-            )
+        raise RuntimeError("CSV download timed out")
 
-            for option in dropdown.find_elements(By.TAG_NAME, "option"):
-                if option.text.strip() == "Export":
-                    option.click()
-                    break
-
-            time.sleep(2)
-
-            start = time.time()
-            while True:
-                files = os.listdir(DOWNLOAD_DIR)
-                if any(f.endswith(".csv") and "export" in f for f in files):
-                    break
-                if time.time() - start > 90:
-                    raise RuntimeError("CSV download timed out")
-                time.sleep(1)
-
-            while any(f.endswith(".crdownload") for f in os.listdir(DOWNLOAD_DIR)):
-                time.sleep(1)
-
-            print("Download complete")
-            driver.quit()
-            return
-
-        except Exception as e:
-            print("Error:", e)
-            driver.save_screenshot("error.png")
-            driver.quit()
-            if attempt == 3:
-                raise
-            time.sleep(5)
-
+    finally:
+        driver.quit()
 
 # ===============================
 # UPLOAD TO GOOGLE SHEETS
 # ===============================
-def upload_to_sheets():
+def upload_to_sheets(today: date):
     print("Uploading to Google Sheets...")
 
     df = pd.read_csv(CSV_FILE, dtype=str).fillna("")
+    df.insert(0, "Last Updated (UTC)", today.isoformat())
 
     cred_file = get_google_credentials()
     creds = Credentials.from_service_account_file(cred_file, scopes=SCOPES)
 
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(SHEET_ID)
-    worksheet = sheet.worksheet(TAB_NAME)
+    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
 
-    worksheet.clear()
-    worksheet.update(
-        [df.columns.tolist()] + df.values.tolist(),
-        value_input_option="RAW"
-    )
-
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
 # ===============================
 # MAIN
 # ===============================
 def main():
-    today = datetime.date.today()
+    today = utc_today()
 
-    print("🟢 massey_auto.py started")
-    print("Today is:", today)
+    print("RUN DATE (UTC):", today)
 
     if not in_season(today):
         print("Out of season — exiting.")
@@ -210,11 +149,10 @@ def main():
         return
 
     download_massey()
-    upload_to_sheets()
+    upload_to_sheets(today)
+
     mark_ran(today)
-
-    print("✅ Massey update complete.")
-
+    print("Update complete.")
 
 if __name__ == "__main__":
     main()
