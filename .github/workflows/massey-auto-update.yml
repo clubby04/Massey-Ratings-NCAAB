@@ -1,9 +1,8 @@
-name: Massey Ratings Auto Update
+name: Update Massey Ratings
 
 on:
   schedule:
-    # Runs daily at 2:00 PM UTC (8 AM CST)
-    - cron: '0 14 * * *'
+    - cron: '0 8 * * *'   # 8 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -19,14 +18,7 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            chromium-browser \
-            chromium-chromedriver
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -36,3 +28,11 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         run: |
           python massey_auto.py
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Auto-update Massey ratings" || echo "No changes to commit"
+          git push
