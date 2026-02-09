@@ -3,6 +3,7 @@ import time
 import json
 import tempfile
 import datetime
+import requests
 import pandas as pd
 
 import gspread
@@ -56,36 +57,22 @@ def write_last_run(today):
 # ===============================
 def download_massey():
     print("Downloading Massey Ratings...")
+
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    url = "https://masseyratings.com/cb/exportCSV.php"
+    response = requests.get(url, timeout=60)
 
-    service = Service("/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to download CSV (status {response.status_code})")
 
-    try:
-        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
-        time.sleep(5)
+    with open(CSV_FILE, "wb") as f:
+        f.write(response.content)
 
-        # 🔧 Ensure previous CSV is removed so we always detect new download
-        if os.path.exists(CSV_FILE):
-            os.remove(CSV_FILE)
+    if os.path.getsize(CSV_FILE) < 1000:
+        raise RuntimeError("Downloaded CSV is unexpectedly small")
 
-        # TODO: click export button here
-
-        timeout = 90
-        start = time.time()
-
-        while time.time() - start < timeout:
-            if os.path.exists(CSV_FILE):
-                print("CSV downloaded.")
-                return
-            time.sleep(1)
-
-        raise RuntimeError("CSV download timed out")
+    print("CSV downloaded.")
 
     finally:
         driver.quit()
