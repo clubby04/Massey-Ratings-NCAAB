@@ -93,10 +93,6 @@ def upload_to_sheets():
 def main():
     today = datetime.date.today()
 
-    if already_ran_today(today):
-        print("Already uploaded today — exiting.")
-        return
-
     download_massey()
     upload_to_sheets()
     write_last_run(today)
