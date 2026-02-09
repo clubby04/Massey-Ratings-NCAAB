@@ -1,9 +1,8 @@
-import os
+import requests
 import time
 import json
 import tempfile
 import datetime
-import requests
 import pandas as pd
 
 import gspread
@@ -73,9 +72,6 @@ def download_massey():
         raise RuntimeError("Downloaded CSV is unexpectedly small")
 
     print("CSV downloaded.")
-
-    finally:
-        driver.quit()
 
 # ===============================
 # UPLOAD
