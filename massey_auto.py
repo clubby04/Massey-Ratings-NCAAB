@@ -63,9 +63,6 @@ def download_massey():
     url = "https://masseyratings.com/cb/exportCSV.php"
     response = requests.get(url, timeout=60)
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Failed to download CSV (status {response.status_code})")
-
     with open(CSV_FILE, "wb") as f:
         f.write(response.content)
 
