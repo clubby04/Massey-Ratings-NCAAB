@@ -1,5 +1,6 @@
 import os
 import requests
+import hashlib
 import time
 import json
 import tempfile
