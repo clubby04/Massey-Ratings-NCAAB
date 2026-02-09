@@ -1,6 +1,15 @@
 import json
 import tempfile
 
+checksum_file = "last_checksum.txt"
+current_checksum = file_checksum(CSV_FILE)
+
+if os.path.exists(checksum_file):
+    with open(checksum_file, "r") as f:
+        last_checksum = f.read().strip()
+    if current_checksum == last_checksum:
+        print("CSV unchanged — skipping Sheets upload.")
+        return
 
 def get_google_credentials():
     secret_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -38,3 +47,6 @@ def upload_to_sheets():
         [df.columns.tolist()] + df.values.tolist(),
         value_input_option="RAW"
     )
+
+with open(checksum_file, "w") as f:
+    f.write(current_checksum)
