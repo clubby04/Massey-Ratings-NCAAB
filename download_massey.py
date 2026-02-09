@@ -17,25 +17,15 @@ def download_massey():
 
     service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    wait = WebDriverWait(driver, 30)
 
     try:
-        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
-
-        # wait for the dropdown
-        dropdown = wait.until(
-            EC.presence_of_element_located((By.ID, "pulldownlinks"))
-        )
-
-        # select "Export"
-        select = Select(dropdown)
-        select.select_by_value("exportCSV")
-
-        # remove old CSV
+        # Remove old CSV so we don't get false positives
         if os.path.exists(CSV_FILE):
             os.remove(CSV_FILE)
 
-        # wait for download
+        # Direct export endpoint (bypasses dropdown JS)
+        driver.get("https://masseyratings.com/cb/exportCSV.php")
+
         timeout = 120
         start = time.time()
         while time.time() - start < timeout:
