@@ -84,7 +84,7 @@ def upload_to_sheets():
     creds = Credentials.from_service_account_file(cred_file, scopes=SCOPES)
     client = gspread.authorize(creds)
 
-    sheet = client.open_by_key(SHEET_ID).sheet1
+    sheet = client.open_by_key(SHEET_ID) Massey_Ratings
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
