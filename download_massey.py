@@ -1,6 +1,3 @@
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-
 def download_massey():
     print("Downloading Massey Ratings...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -10,7 +7,6 @@ def download_massey():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # 🔑 ensure downloads go to /downloads
     prefs = {
         "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
         "download.prompt_for_download": False,
@@ -26,25 +22,21 @@ def download_massey():
     try:
         driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
 
-        # 🔴 Click the red "More" button
-        more_button = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'More')]"))
+        # wait for the dropdown
+        dropdown = wait.until(
+            EC.presence_of_element_located((By.ID, "pulldownlinks"))
         )
-        driver.execute_script("arguments[0].scrollIntoView(true);", more_button)
-        more_button.click()
 
-        # 📤 Click "Export"
-        export_button = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Export')]"))
-        )
-        export_button.click()
+        # select "Export"
+        select = Select(dropdown)
+        select.select_by_value("exportCSV")
 
-        # 🧹 remove old CSV if present
+        # remove old CSV
         if os.path.exists(CSV_FILE):
             os.remove(CSV_FILE)
 
-        # ⏳ wait for download
-        timeout = 90
+        # wait for download
+        timeout = 120
         start = time.time()
         while time.time() - start < timeout:
             if os.path.exists(CSV_FILE) and not any(
