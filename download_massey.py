@@ -1,41 +1,63 @@
 def download_massey():
     print("Downloading Massey Ratings...")
 
+    import shutil
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.service import Service
+    import time
+
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    base_url = "https://masseyratings.com/cb/ncaa-d1.php"
+    # Clear old export file if exists
+    for f in os.listdir(DOWNLOAD_DIR):
+        if f.startswith("export") and f.endswith(".csv"):
+            os.remove(os.path.join(DOWNLOAD_DIR, f))
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Referer": base_url,
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    prefs = {
+        "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
     }
+    chrome_options.add_experimental_option("prefs", prefs)
 
-    session = requests.Session()
-    session.headers.update(headers)
+    service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-    # Step 1: load page (sets session cookie)
-    r1 = session.get(base_url, timeout=60)
-    if r1.status_code != 200:
-        raise RuntimeError("Failed to load Massey NCAA page")
+    try:
+        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
 
-    # Step 2: POST export action (this matches the dropdown behavior)
-    r2 = session.post(
-        base_url,
-        data={"pulldownlinks": "exportCSV"},
-        timeout=60,
-    )
+        wait = WebDriverWait(driver, 30)
+        dropdown = wait.until(
+            EC.presence_of_element_located((By.ID, "pulldownlinks"))
+        )
 
-    if r2.status_code != 200:
-        raise RuntimeError(f"Failed to download CSV (status {r2.status_code})")
+        for option in dropdown.find_elements(By.TAG_NAME, "option"):
+            if option.get_attribute("value") == "exportCSV":
+                option.click()
+                break
 
-    with open(CSV_FILE, "wb") as f:
-        f.write(r2.content)
+        # Wait for download
+        timeout = 60
+        start = time.time()
 
-    if os.path.getsize(CSV_FILE) < 1000:
-        raise RuntimeError("Downloaded CSV is unexpectedly small")
+        while True:
+            files = os.listdir(DOWNLOAD_DIR)
+            if any(f.endswith(".csv") for f in files):
+                break
+            if time.time() - start > timeout:
+                raise RuntimeError("CSV download timed out")
+            time.sleep(1)
 
-    print("CSV downloaded.")
+        print("CSV downloaded.")
+
+    finally:
+        driver.quit()
