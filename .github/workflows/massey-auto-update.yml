@@ -34,3 +34,6 @@ jobs:
           git add .
           git commit -m "Auto-update Massey ratings" || echo "No changes to commit"
           git push
+          git add requirements.txt
+          git commit -m "Fix requirements"
+          git push
