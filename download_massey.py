@@ -1,63 +1,37 @@
+import requests
+import os
+import csv
+
+DOWNLOAD_DIR = "downloads"
+MASSEY_URL = "https://masseyratings.com/json/rate.php?argv=slxlZrMjujc7FOv1L0Uz63eIfW0G5Xxyawl2HTSr7Vks72nWxxwgp35IAExoj-Cv39AN9n6oCP6-MoaTOAPIJchbHTuLa7KpHCbHhWc4sGw.&task=json"
+
 def download_massey():
-    print("Downloading Massey Ratings...")
-
-    import shutil
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.chrome.service import Service
-    import time
-
+    print("Downloading Massey Ratings (JSON endpoint)...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # Clear old export file if exists
-    for f in os.listdir(DOWNLOAD_DIR):
-        if f.startswith("export") and f.endswith(".csv"):
-            os.remove(os.path.join(DOWNLOAD_DIR, f))
-
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    prefs = {
-        "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://masseyratings.com/cb/ncaa-d1/ratings"
     }
-    chrome_options.add_experimental_option("prefs", prefs)
 
-    service = Service("/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    response = requests.get(MASSEY_URL, headers=headers, timeout=60)
+    response.raise_for_status()
 
-    try:
-        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
+    data = response.json()
 
-        wait = WebDriverWait(driver, 30)
-        dropdown = wait.until(
-            EC.presence_of_element_located((By.ID, "pulldownlinks"))
-        )
+    output_file = os.path.join(DOWNLOAD_DIR, "massey_ratings.csv")
 
-        for option in dropdown.find_elements(By.TAG_NAME, "option"):
-            if option.get_attribute("value") == "exportCSV":
-                option.click()
-                break
+    # The JSON structure usually contains a 'data' key
+    rows = data.get("data", [])
 
-        # Wait for download
-        timeout = 60
-        start = time.time()
+    if not rows:
+        raise Exception("No data found in JSON response.")
 
-        while True:
-            files = os.listdir(DOWNLOAD_DIR)
-            if any(f.endswith(".csv") for f in files):
-                break
-            if time.time() - start > timeout:
-                raise RuntimeError("CSV download timed out")
-            time.sleep(1)
+    # Write CSV
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(rows[0].keys())  # headers
+        for row in rows:
+            writer.writerow(row.values())
 
-        print("CSV downloaded.")
-
-    finally:
-        driver.quit()
+    print("Massey CSV saved successfully.")
