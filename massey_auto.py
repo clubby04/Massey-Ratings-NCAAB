@@ -78,7 +78,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 def download_massey():
     print("Downloading Massey Ratings...")
@@ -97,9 +96,8 @@ def download_massey():
     chrome_options.add_experimental_option("prefs", prefs)
 
     driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=chrome_options
-    )
+        service = Service("/usr/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
