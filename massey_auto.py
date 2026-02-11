@@ -97,7 +97,7 @@ def download_massey():
 
     driver = webdriver.Chrome(
         service = Service("/usr/bin/chromedriver"))
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
