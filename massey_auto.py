@@ -77,10 +77,6 @@ def download_massey():
     print("Downloading Massey Ratings...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    url = "https://masseyratings.com/cb/exportCSV.php"
-    response = requests.get(url, timeout=60)
-    response.raise_for_status()  # fail fast on bad status
-
     with open(CSV_FILE, "wb") as f:
         f.write(response.content)
 
