@@ -34,12 +34,10 @@ def get_google_credentials():
     return temp.name
 
 # ===============================
-# DOWNLOAD + UPLOAD
+# FETCH JSON
 # ===============================
 def fetch_massey_json():
     print("Fetching Massey JSON...")
-
-    url = "https://masseyratings.com/json/rate.php?argv=slxlZrMjujc7FOv1L0Uz63eIfW0G5Xxyawl2HTSr7Vks72nWxxwgp35IAExoj-Cv39AN9n6oCP6-MoaTOAPIJchbHTuLa7KpHCbHhWc4sGw.&task=json"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -49,18 +47,22 @@ def fetch_massey_json():
     }
 
     session = requests.Session()
-    response = session.get(url, headers=headers, timeout=60)
-
+    response = session.get(MASSEY_URL, headers=headers, timeout=60)
     response.raise_for_status()
 
     return response.json()
+
+# ===============================
+# UPDATE SHEET
+# ===============================
+def update_massey_sheet():
+    rows = fetch_massey_json()
 
     if not rows:
         raise Exception("No data returned from Massey")
 
     print(f"Retrieved {len(rows)} rows")
 
-    # Convert JSON rows into 2D list for Sheets
     headers_row = list(rows[0].keys())
     values = [headers_row]
 
