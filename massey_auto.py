@@ -1,34 +1,21 @@
-import os
-import time
+import requests
 import json
-import hashlib
+import os
 import tempfile
 import datetime
-import pandas as pd
-
 import gspread
 from google.oauth2.service_account import Credentials
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-
 
 # ===============================
 # CONSTANTS
 # ===============================
-DOWNLOAD_DIR = "downloads"
-CSV_FILE = os.path.join(DOWNLOAD_DIR, "export.csv")
-CHECKSUM_FILE = "last_checksum.txt"
-
 SHEET_ID = "1LiE7lf1FNK91ieiszgtzloZfQxMWa8pRSa9f-2JIEIc"
 WORKSHEET_NAME = "Massey_Ratings"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
+MASSEY_URL = "https://masseyratings.com/json/rate.php?argv=slxlZrMjujc7FOv1L0Uz63eIfW0G5Xxyawl2HTSr7Vks72nWxxwgp35IAExoj-Cv39AN9n6oCP6-MoaTOAPIJchbHTuLa7KpHCbHhWc4sGw.&task=json"
 
+print(f"RUN DATE (UTC): {datetime.datetime.utcnow().isoformat()}")
 
 # ===============================
 # GOOGLE CREDENTIALS
@@ -46,119 +33,36 @@ def get_google_credentials():
 
     return temp.name
 
-
 # ===============================
-# CHECKSUM
+# DOWNLOAD + UPLOAD
 # ===============================
-def file_checksum(filepath):
-    sha256 = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for block in iter(lambda: f.read(4096), b""):
-            sha256.update(block)
-    return sha256.hexdigest()
+def update_massey_sheet():
+    print("Fetching Massey JSON...")
 
-
-# ===============================
-# DOWNLOAD VIA SELENIUM
-# ===============================
-def download_massey():
-    print("Downloading Massey Ratings...")
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
-    if os.path.exists(CSV_FILE):
-        os.remove(CSV_FILE)
-
-    chrome_options = webdriver.ChromeOptions()
-
-    # Headless but stealth
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option("useAutomationExtension", False)
-
-    prefs = {
-        "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://masseyratings.com/cb/ncaa-d1/ratings"
     }
-    chrome_options.add_experimental_option("prefs", prefs)
 
-    service = Service("/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    response = requests.get(MASSEY_URL, headers=headers, timeout=60)
+    response.raise_for_status()
 
-    # Remove webdriver flag
-    driver.execute_cdp_cmd(
-        "Page.addScriptToEvaluateOnNewDocument",
-        {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                })
-            """
-        },
-    )
+    data = response.json()
+    rows = data.get("data", [])
 
-    try:
-        print("Opening Massey page...")
-        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
+    if not rows:
+        raise Exception("No data returned from Massey")
 
-        wait = WebDriverWait(driver, 45)
+    print(f"Retrieved {len(rows)} rows")
 
-        print("Waiting for dropdown...")
-        dropdown = wait.until(
-            EC.presence_of_element_located((By.ID, "pulldownlinks"))
-        )
+    # Convert JSON rows into 2D list for Sheets
+    headers_row = list(rows[0].keys())
+    values = [headers_row]
 
-        print("Dropdown found. Clicking export...")
+    for row in rows:
+        values.append([row.get(col, "") for col in headers_row])
 
-        for option in dropdown.find_elements(By.TAG_NAME, "option"):
-            if option.get_attribute("value") == "exportCSV":
-                option.click()
-                break
-
-        print("Waiting for CSV download...")
-
-        timeout = time.time() + 90
-        while time.time() < timeout:
-            if os.path.exists(CSV_FILE):
-                break
-            time.sleep(1)
-        else:
-            raise RuntimeError("CSV download timed out")
-
-        size = os.path.getsize(CSV_FILE)
-        if size < 1000:
-            raise RuntimeError(f"Downloaded CSV too small ({size} bytes)")
-
-        print(f"CSV downloaded successfully ({size} bytes)")
-
-    finally:
-        driver.quit()
-
-
-# ===============================
-# UPLOAD TO GOOGLE SHEETS
-# ===============================
-def upload_to_sheets():
-    print("Uploading to Google Sheets...")
-
-    if not os.path.exists(CSV_FILE):
-        raise FileNotFoundError(f"CSV file not found: {CSV_FILE}")
-
-    df = pd.read_csv(CSV_FILE, dtype=str).fillna("")
-
-    current_checksum = file_checksum(CSV_FILE)
-
-    if os.path.exists(CHECKSUM_FILE):
-        with open(CHECKSUM_FILE, "r") as f:
-            last_checksum = f.read().strip()
-
-        if current_checksum == last_checksum:
-            print("CSV unchanged — skipping Sheets upload.")
-            return
+    print("Connecting to Google Sheets...")
 
     cred_file = get_google_credentials()
     creds = Credentials.from_service_account_file(cred_file, scopes=SCOPES)
@@ -167,31 +71,23 @@ def upload_to_sheets():
     spreadsheet = client.open_by_key(SHEET_ID)
     worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
 
+    print("Clearing worksheet...")
     worksheet.clear()
-    worksheet.update(
-        [df.columns.tolist()] + df.values.tolist(),
-        value_input_option="RAW"
-    )
 
-    print("Sheet updated successfully.")
+    print("Uploading data...")
+    worksheet.update(values, value_input_option="RAW")
 
-    with open(CHECKSUM_FILE, "w") as f:
-        f.write(current_checksum)
-
-    print("Checksum saved.")
-
+    print("Upload complete.")
 
 # ===============================
 # MAIN
 # ===============================
 def main():
     try:
-        download_massey()
-        upload_to_sheets()
+        update_massey_sheet()
     except Exception as e:
-        print(f"ERROR: {type(e).__name__}: {e}")
+        print(f"ERROR: {type(e).__name__}: {str(e)}")
         raise
-
 
 if __name__ == "__main__":
     main()
