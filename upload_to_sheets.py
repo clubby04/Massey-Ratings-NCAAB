@@ -40,7 +40,7 @@ def upload_to_sheets():
 
     client = gspread.authorize(creds)
     sheet = client.open_by_key(SHEET_ID)
-    worksheet = sheet.worksheet(Massey_Ratings)
+    worksheet = sheet.worksheet(TAB_NAME)
 
     worksheet.clear()
     worksheet.update(
