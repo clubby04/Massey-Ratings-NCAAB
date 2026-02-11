@@ -36,19 +36,24 @@ def get_google_credentials():
 # ===============================
 # DOWNLOAD + UPLOAD
 # ===============================
-def update_massey_sheet():
+def fetch_massey_json():
     print("Fetching Massey JSON...")
 
+    url = "https://masseyratings.com/json/rate.php?argv=slxlZrMjujc7FOv1L0Uz63eIfW0G5Xxyawl2HTSr7Vks72nWxxwgp35IAExoj-Cv39AN9n6oCP6-MoaTOAPIJchbHTuLa7KpHCbHhWc4sGw.&task=json"
+
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://masseyratings.com/cb/ncaa-d1/ratings"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://masseyratings.com/cb/ncaa-d1/ratings",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Connection": "keep-alive"
     }
 
-    response = requests.get(MASSEY_URL, headers=headers, timeout=60)
+    session = requests.Session()
+    response = session.get(url, headers=headers, timeout=60)
+
     response.raise_for_status()
 
-    data = response.json()
-    rows = data.get("data", [])
+    return response.json()
 
     if not rows:
         raise Exception("No data returned from Massey")
