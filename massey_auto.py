@@ -96,7 +96,7 @@ def download_massey():
     chrome_options.add_experimental_option("prefs", prefs)
 
     driver = webdriver.Chrome(
-        service = Service("/usr/bin/chromedriver")
+        service = Service("/usr/bin/chromedriver"))
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
