@@ -65,14 +65,19 @@ def download_massey():
     print("Downloading Massey Ratings...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    # Remove old CSV if it exists
     if os.path.exists(CSV_FILE):
         os.remove(CSV_FILE)
 
     chrome_options = webdriver.ChromeOptions()
+
+    # Headless but stealth
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
 
     prefs = {
         "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
@@ -84,20 +89,38 @@ def download_massey():
     service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
+    # Remove webdriver flag
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                })
+            """
+        },
+    )
+
     try:
+        print("Opening Massey page...")
         driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
 
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 45)
+
+        print("Waiting for dropdown...")
         dropdown = wait.until(
             EC.presence_of_element_located((By.ID, "pulldownlinks"))
         )
+
+        print("Dropdown found. Clicking export...")
 
         for option in dropdown.find_elements(By.TAG_NAME, "option"):
             if option.get_attribute("value") == "exportCSV":
                 option.click()
                 break
 
-        # Wait for download
+        print("Waiting for CSV download...")
+
         timeout = time.time() + 90
         while time.time() < timeout:
             if os.path.exists(CSV_FILE):
