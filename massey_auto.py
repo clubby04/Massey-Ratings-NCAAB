@@ -73,18 +73,61 @@ def write_last_run(today):
 # ===============================
 # DOWNLOAD
 # ===============================
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
 def download_massey():
     print("Downloading Massey Ratings...")
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    with open(CSV_FILE, "wb") as f:
-        f.write(response.content)
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-    size = os.path.getsize(CSV_FILE)
-    if size < 1000:
-        raise RuntimeError(f"Downloaded CSV is too small ({size} bytes)")
+    prefs = {
+        "download.default_directory": os.path.abspath(DOWNLOAD_DIR),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
 
-    print(f"CSV downloaded successfully ({size} bytes)")
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options
+    )
+
+    try:
+        driver.get("https://masseyratings.com/cb/ncaa-d1/ratings")
+
+        wait = WebDriverWait(driver, 30)
+        dropdown = wait.until(
+            EC.presence_of_element_located((By.ID, "pulldownlinks"))
+        )
+
+        for option in dropdown.find_elements(By.TAG_NAME, "option"):
+            if option.get_attribute("value") == "exportCSV":
+                option.click()
+                break
+
+        # Wait for file
+        timeout = time.time() + 90
+        while time.time() < timeout:
+            files = os.listdir(DOWNLOAD_DIR)
+            if any(f.endswith(".csv") for f in files):
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError("CSV download timed out")
+
+        print("CSV downloaded.")
+
+    finally:
+        driver.quit()
 
 # ===============================
 # UPLOAD TO SHEETS
